@@ -162,12 +162,12 @@ void *sfs_init(struct fuse_conn_info *conn)
 
     struct stat *statbuf = (struct stat*) malloc(sizeof(struct stat));
     int in = lstat((SFS_DATA)->diskfile,statbuf);
-    log_msg("\nVIRTUAL DISK FILE STAT: \n");
+    log_msg("\nDisk file stat: \n");
     log_stat(statbuf);
 
     log_msg("\nChecking diskfile size for initialization ... \n");
     if(in != 0) {
-        perror("No STAT on diskfile");
+        perror("Diskfile err");
         exit(EXIT_FAILURE);
     }
 
@@ -177,14 +177,12 @@ void *sfs_init(struct fuse_conn_info *conn)
     
     char *buf = (char*) malloc(BLOCK_SIZE);
     if(block_read(0, buf) <= 0) {
-      // initialize superblock etc here in file
       log_msg("\nsfs_init: Initializing SUPERBLOCK and INODES TABLE in the diskFile\n");
       supablock.inodes = TOTAL_INODE_NUMBER;
       supablock.fs_type = 0;
       supablock.data_blocks = TOTAL_DATA_BLOCKS;
       supablock.i_list = 1;
-      
-
+     
       init_data_structure();
 
       //init the root i-node here
