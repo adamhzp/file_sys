@@ -114,6 +114,20 @@ void set_block_bit(int index, int bit)
   block_bm.bitmap[index] = bit;
 }
 
+int get_inode_from_path(const char* path)
+{
+    log_msg("\nLooking for inode for path: %s\n", path);
+    int i = 0;
+    for(;i<TOTAL_INODE_NUMBER;i++)
+    {
+      if(strcmp(inodes_table.table[i].path, path) == 0){
+        log_msg("Inode found: %d", i);
+        return i;
+      }
+    }
+    return -1;
+}
+
 
 /* 
  * A function initiate the inodes for the first setup of the file system
@@ -165,7 +179,7 @@ void *sfs_init(struct fuse_conn_info *conn)
 
     struct stat *statbuf = (struct stat*) malloc(sizeof(struct stat));
     int in = lstat((SFS_DATA)->diskfile,statbuf);
-    log_msg("\nVIRTUAL DISK FILE STAT: \n");
+    log_msg("\nVIRTUAL DISK FILE STAT: %s\n", (SFS_DATA)->diskfile);
     log_stat(statbuf);
 
     log_msg("\nChecking diskfile size for initialization ... \n");
@@ -311,10 +325,30 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     int retstat = 0;
     char fpath[PATH_MAX];
     
-    retstat = stat(path, statbuf);
+    //retstat = stat(path, statbuf);
+
+    //search for inode
+    int inode = get_inode_from_path(path);
+    memset(statbuf,0,sizeof(struct stat));
+    if(inode!=-1)
+    {
+      inode_t *tmp = &inodes_table.table[inode];
+      statbuf->st_uid = tmp->uid;
+      statbuf->st_gid = tmp->gid;
+      statbuf->st_mode = tmp->st_mode;
+      statbuf->st_nlink = tmp->links;
+      statbuf->st_ctime = tmp->created;
+      statbuf->st_size = tmp->size;
+      statbuf->st_blocks = tmp->blocks;
+    }else{
+      log_msg("\n\nInode not found\n\n");
+    }
 
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
 	  path, statbuf);
+
+    log_stat(statbuf);
+
     
     return retstat;
 }
@@ -472,6 +506,7 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
 	  path, fi);
+
     
     return retstat;
 }
@@ -502,7 +537,7 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 {
     int retstat = 0;
     
-    
+      
     return retstat;
 }
 
