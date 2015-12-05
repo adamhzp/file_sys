@@ -64,7 +64,7 @@ struct inode
   unsigned char path[64]; //96 bytes
   unsigned int node_ptrs[15];//156 bytes
   time_t last_accessed, created, modified;// 180 bytes 
-  char unusedspace[76];
+  char unusedspace[68];
 };
 
 
@@ -160,14 +160,17 @@ void *sfs_init(struct fuse_conn_info *conn)
     fprintf(stderr, "in bb-init\n");
     log_msg("\nAdam---Initiating the file system(sys_init)\n");
 
+
+    log_msg("\nsize of an inode is %d bytes\n\n", sizeof(struct inode));
+
     struct stat *statbuf = (struct stat*) malloc(sizeof(struct stat));
     int in = lstat((SFS_DATA)->diskfile,statbuf);
-    log_msg("\nDisk file stat: \n");
+    log_msg("\nVIRTUAL DISK FILE STAT: \n");
     log_stat(statbuf);
 
     log_msg("\nChecking diskfile size for initialization ... \n");
     if(in != 0) {
-        perror("Diskfile err");
+        perror("No STAT on diskfile");
         exit(EXIT_FAILURE);
     }
 
@@ -177,12 +180,14 @@ void *sfs_init(struct fuse_conn_info *conn)
     
     char *buf = (char*) malloc(BLOCK_SIZE);
     if(block_read(0, buf) <= 0) {
+      // initialize superblock etc here in file
       log_msg("\nsfs_init: Initializing SUPERBLOCK and INODES TABLE in the diskFile\n");
       supablock.inodes = TOTAL_INODE_NUMBER;
       supablock.fs_type = 0;
       supablock.data_blocks = TOTAL_DATA_BLOCKS;
       supablock.i_list = 1;
-     
+      
+
       init_data_structure();
 
       //init the root i-node here
@@ -250,19 +255,19 @@ void *sfs_init(struct fuse_conn_info *conn)
         log_msg("\n\nInode bitmap is read\n\n");
       }
 
-      if(block_read(3, buffer)>0)
+      //load all the inodes..
+      int i = 0;
+      for(; i< 64; i++)
       {
-        memcpy(&inodes_table.table[0], buffer, sizeof(struct inode));
-        memset(buffer, 0, BLOCK_SIZE);
-        log_msg("\n\n%s\n\n", inodes_table.table[0].path);
+        int offset = BLOCK_SIZE;
+        //if(block_read(i+3))
       }
+      
 
       free(buffer);
 
     }
     free(buf);
-
-
 
     log_conn(conn);
     log_fuse_context(fuse_get_context());
