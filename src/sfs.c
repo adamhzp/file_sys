@@ -89,6 +89,29 @@ struct i_bitmap inodes_bm;
 struct block_bitmap block_bm;
 struct i_list inodes_table;
 
+/*  some helper functions */
+void get_full_path(char *path) {
+  char *fpath = (char*) malloc(64*sizeof(char));
+  strcpy(fpath, SFS_DATA->diskfile);
+  strncat(fpath,path,64);
+  log_msg("\nDEBUG: path: %s with full path: %s\n",path,fpath);
+  path = fpath;
+}
+
+void set_inode_bit(int index, int bit)
+{
+  if(!(bit==0 || bit == 1))
+    return;
+  inodes_bm.bitmap[index] = bit;
+}
+
+void set_block_bit(int index, int bit)
+{
+  if(!(bit==0 || bit == 1))
+    return;
+  block_bm.bitmap[index] = bit;
+}
+
 
 ///////////////////////////////////////////////////////////
 //
