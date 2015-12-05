@@ -274,14 +274,6 @@ void *sfs_init(struct fuse_conn_info *conn)
           log_msg("\n\ninode block %d cannot be loaded", i);
         }
       }
-      i = 0;
-      log_msg("\n\n testing the loaded inodes here\n");
-      while(i<TOTAL_INODE_NUMBER)
-      {
-        log_msg("\ninode %d index: %d\n", i,inodes_table.table[i].id);
-        i++;
-      }
-      
 
       free(buffer);
 
