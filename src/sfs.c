@@ -31,6 +31,7 @@
 #define TOTAL_INODE_NUMBER ((BLOCK_SIZE*64)/(sizeof(struct inode)))
 #define TOTAL_DATA_BLOCKS (TOTAL_BLOCKS - TOTAL_INODE_NUMBER - 1)
 
+
 #include "log.h"
 
 typedef struct inode inode_t;
@@ -89,6 +90,7 @@ struct i_bitmap inodes_bm;
 struct block_bitmap block_bm;
 struct i_list inodes_table;
 
+
 /*  some helper functions */
 void get_full_path(char *path) {
   char *fpath = (char*) malloc(64*sizeof(char));
@@ -113,8 +115,32 @@ void set_block_bit(int index, int bit)
 }
 
 
-///////////////////////////////////////////////////////////
-//
+/* 
+ * A function initiate the inodes for the first setup of the file system
+ */
+
+void init_data_structure()
+{
+  int i;
+  for(i = 0; i<TOTAL_INODE_NUMBER; i++)
+  {
+    inodes_table.table[i].id = i;
+  }
+
+  for(i = 0; i<TOTAL_INODE_NUMBER;i++)
+  {
+    inodes_bm.bitmap[i] = 0;
+  }
+  for(i = 0; i<TOTAL_DATA_BLOCKS;i++)
+  {
+    block_bm.bitmap[i] = 0;
+  }
+
+  inodes_bm.size = TOTAL_INODE_NUMBER;
+  block_bm.size = TOTAL_DATA_BLOCKS;
+  
+}
+
 // Prototypes for all these functions, and the C-style comments,
 // come indirectly from /usr/include/fuse.h
 //
@@ -132,8 +158,114 @@ void set_block_bit(int index, int bit)
 void *sfs_init(struct fuse_conn_info *conn)
 {
     fprintf(stderr, "in bb-init\n");
-    log_msg("\nsfs_init()\n");
+    log_msg("\nAdam---Initiating the file system(sys_init)\n");
+
+    struct stat *statbuf = (struct stat*) malloc(sizeof(struct stat));
+    int in = lstat((SFS_DATA)->diskfile,statbuf);
+    log_msg("\nVIRTUAL DISK FILE STAT: \n");
+    log_stat(statbuf);
+
+    log_msg("\nChecking diskfile size for initialization ... \n");
+    if(in != 0) {
+        perror("No STAT on diskfile");
+        exit(EXIT_FAILURE);
+    }
+
+
+    log_msg("\nCHECKING THE DISKFILE\n");
+    disk_open((SFS_DATA)->diskfile);
     
+    char *buf = (char*) malloc(BLOCK_SIZE);
+    if(block_read(0, buf) <= 0) {
+      // initialize superblock etc here in file
+      log_msg("\nsfs_init: Initializing SUPERBLOCK and INODES TABLE in the diskFile\n");
+      supablock.inodes = TOTAL_INODE_NUMBER;
+      supablock.fs_type = 0;
+      supablock.data_blocks = TOTAL_DATA_BLOCKS;
+      supablock.i_list = 1;
+      
+
+      init_data_structure();
+
+      //init the root i-node here
+      inode_t *root = &inodes_table.table[0];
+      memcpy(&root->path,"/",1);
+      root->st_mode = S_IFDIR;
+      root->size = 0;
+      root->links = 2;
+      root->created = time(NULL);
+      root->blocks = 0;
+      root->uid = getuid();
+      root->gid = getgid();
+      root->type = 0;  // directory
+
+      set_inode_bit(0,1); // set the bit map for root
+
+      if (block_write(0, &supablock) > 0)
+        log_msg("\nInit(): Super Block is written in the file\n");
+
+      if(block_write(1, &inodes_bm)>0)
+        log_msg("\nInit(): inode bitmap is written in the file\n");
+
+      if(block_write(2, &block_bm)>0)
+        log_msg("\nInit(): block bitmap is written in the file\n");
+
+      int i = 0, j = 0;
+      uint8_t *buffer = malloc(BLOCK_SIZE);
+      for(; i < 64; i++)
+      {
+        int block_left = BLOCK_SIZE;
+        while(block_left >= sizeof(struct inode)){
+          memcpy((buffer+(BLOCK_SIZE - block_left)), &inodes_table.table[j], sizeof(struct inode));
+          log_msg("\ninode %d is created in block %d\n", j, i+3);
+          block_left -= sizeof(struct inode);
+          j++;
+        }
+        //write the block
+        if(block_write(i+3, buffer) <= 0) {
+          log_msg("\nFailed to write block %d\n", i);
+        }else{
+          log_msg("\nSucceed to write block %d\n", i);
+        }
+      }
+      free(buffer);
+    }else{
+      //read the superblock bitmaps and inodes from the disk file
+
+      log_msg("\n\n Loading the superblock, bitmaps and inodes to memory\n\nchecking the super block:\n");
+      //check  the super block reading
+      struct superblock *sb = (struct superblock*) buf;
+      log_msg("Inode number: %d(should be %d)\n", sb->inodes,TOTAL_INODE_NUMBER);
+      log_msg("Data blocks number: %d(should be %d)\n\n\n", sb->data_blocks,TOTAL_DATA_BLOCKS);
+
+      uint8_t *buffer = malloc(BLOCK_SIZE*sizeof(uint8_t));
+
+      if(block_read(1, buffer) > 0){
+        memcpy(&inodes_bm,buffer, sizeof(struct i_bitmap));
+        memset(buffer,0,BLOCK_SIZE);
+        log_msg("\n\nInode bitmap is read:\n testing bitmap: %d,%d\n\n",inodes_bm.bitmap[0],inodes_bm.bitmap[1]);
+      }
+
+      if(block_read(2, buffer)>0){
+        memcpy(&block_bm, buffer, sizeof(struct block_bitmap));
+        memset(buffer, 0, BLOCK_SIZE);
+        log_msg("\n\nInode bitmap is read\n\n");
+      }
+
+      if(block_read(3, buffer)>0)
+      {
+        memcpy(&inodes_table.table[0], buffer, sizeof(struct inode));
+        memset(buffer, 0, BLOCK_SIZE);
+        log_msg("\n\n%s\n\n", inodes_table.table[0].path);
+      }
+
+      free(buffer);
+
+    }
+    free(buf);
+
+
+
     log_conn(conn);
     log_fuse_context(fuse_get_context());
 
@@ -149,6 +281,8 @@ void *sfs_init(struct fuse_conn_info *conn)
  */
 void sfs_destroy(void *userdata)
 {
+    disk_close();
+    log_msg("\ndisk file closed\n");
     log_msg("\nsfs_destroy(userdata=0x%08x)\n", userdata);
 }
 
@@ -163,6 +297,8 @@ int sfs_getattr(const char *path, struct stat *statbuf)
     int retstat = 0;
     char fpath[PATH_MAX];
     
+    retstat = stat(path, statbuf);
+
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
 	  path, statbuf);
     
@@ -322,7 +458,6 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
 	  path, fi);
-    
     
     return retstat;
 }
