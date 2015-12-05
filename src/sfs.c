@@ -27,7 +27,62 @@
 #include <sys/xattr.h>
 #endif
 
+#define TOTAL_BLOCKS 1024
+#define TOTAL_INODE_NUMBER ((BLOCK_SIZE*64)/(sizeof(struct inode)))
+#define TOTAL_DATA_BLOCKS (TOTAL_BLOCKS - TOTAL_INODE_NUMBER - 1)
+
 #include "log.h"
+
+typedef struct inode inode_t;
+
+/* data structures
+ * super block to hold the info of data file
+ * inode to hold the info of a file
+ * bitmaps to notify how are inodes and data blocks being used
+ */
+
+struct superblock
+{
+  int inodes;
+  int fs_type;
+  int data_blocks;
+  int i_list;
+};
+
+
+struct inode
+{//256 bytes now...
+  int id;
+  int size;
+  int uid;
+  int gid;
+  int type; 
+  int links;
+  int blocks;
+  mode_t st_mode; //32 bytes 
+  unsigned char path[64]; //96 bytes
+  unsigned int node_ptrs[15];//156 bytes
+  time_t last_accessed, created, modified;// 180 bytes 
+  char unusedspace[76];
+};
+
+
+struct i_list{ //use a struct to make it in the heap
+  inode_t table[TOTAL_INODE_NUMBER];
+};
+
+
+struct i_bitmap
+{
+  unsigned char bitmap[TOTAL_INODE_NUMBER];
+  int size;
+};
+
+struct block_bitmap
+{
+  unsigned char bitmap[TOTAL_DATA_BLOCKS];
+  int size;
+};
 
 
 ///////////////////////////////////////////////////////////
