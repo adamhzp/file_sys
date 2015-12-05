@@ -252,15 +252,34 @@ void *sfs_init(struct fuse_conn_info *conn)
       if(block_read(2, buffer)>0){
         memcpy(&block_bm, buffer, sizeof(struct block_bitmap));
         memset(buffer, 0, BLOCK_SIZE);
-        log_msg("\n\nInode bitmap is read\n\n");
+        log_msg("\n\nBlock bitmap is read\n\n");
       }
 
       //load all the inodes..
       int i = 0;
+      int k = 0;
       for(; i< 64; i++)
       {
-        int offset = BLOCK_SIZE;
-        //if(block_read(i+3))
+        int offset = 0;
+        if(block_read(i+3, buffer)>0)
+        {
+          log_msg("\n\ninode block %d is read.\n",i);
+          while(offset < BLOCK_SIZE && (BLOCK_SIZE - offset)>=sizeof(struct inode)){
+            memcpy(&inodes_table.table[k], buffer+offset, sizeof(struct inode));
+            k++;
+            offset+=sizeof(struct inode);
+            log_msg("Inode %d is loaded to memory.",k-1);
+          }
+        }else{
+          log_msg("\n\ninode block %d cannot be loaded", i);
+        }
+      }
+      i = 0;
+      log_msg("\n\n testing the loaded inodes here\n");
+      while(i<TOTAL_INODE_NUMBER)
+      {
+        log_msg("\ninode %d index: %d\n", i,inodes_table.table[i].id);
+        i++;
       }
       
 
