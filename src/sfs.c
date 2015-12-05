@@ -84,6 +84,11 @@ struct block_bitmap
   int size;
 };
 
+struct superblock supablock;
+struct i_bitmap inodes_bm;
+struct block_bitmap block_bm;
+struct i_list inodes_table;
+
 
 ///////////////////////////////////////////////////////////
 //
