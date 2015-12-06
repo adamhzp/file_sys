@@ -37,7 +37,7 @@
 #include "log.h"
 
 typedef struct inode inode_t;
-
+typedef struct file_descriptor fd_t;
 /* data structures
  * super block to hold the info of data file
  * inode to hold the info of a file
@@ -64,7 +64,7 @@ struct inode
   int blocks;
   mode_t st_mode; //32 bytes 
   unsigned char path[64]; //96 bytes
-  unsigned int node_ptrs[15];//156 bytes
+  unsigned int data_blocks[15];//156 bytes
   time_t last_accessed, created, modified;// 180 bytes 
   char unusedspace[68];
 };
@@ -90,11 +90,11 @@ struct block_bitmap
 struct file_descriptor{
   int id;
   int inode_id;
-}
+};
 
 struct fd_table{
-  struct file_descriptor table[TOTAL_INODE_NUMBER];
-}
+  fd_t table[TOTAL_INODE_NUMBER];
+};
 
 
 struct superblock supablock;
@@ -206,6 +206,37 @@ int write_inode_to_disk(int index)
   return rtn;
 }
 
+int get_empty_fd()
+{
+  int i;
+  for(i = 0; i < TOTAL_INODE_NUMBER; i++)
+  {
+    if(fd.table[i].id != -1)
+      return i;
+  }
+  return -1;
+}
+
+int find_fd(int index)
+{
+  int i;
+  for(i = 0; i < TOTAL_INODE_NUMBER; i++)
+  {
+    if(fd.table[i].id == index)
+      return i;
+  }
+  return -1;
+}
+
+int take_fd(int index)
+{
+  if(fd.table[index].id == -1){
+    fd.table[index].id = index;
+    return 0;
+  }
+  return -1;
+}
+
 
 
 /* 
@@ -272,10 +303,10 @@ void *sfs_init(struct fuse_conn_info *conn)
     disk_open((SFS_DATA)->diskfile);
 
     in = 0;
-    for(; i<TOTAL_INODE_NUMBER;i++)
+    for(; in<TOTAL_INODE_NUMBER;in++)
     {
-      fd.table[i].id = i;
-      fd.table[i].inode_id = -1;
+      fd.table[in].id = in;
+      fd.table[in].inode_id = -1;
     }
     
     char *buf = (char*) malloc(BLOCK_SIZE);
@@ -532,8 +563,17 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     int i = get_inode_from_path(path);
     if(i != -1)
     {
-      log_msg("Found inode(index: %d) for file with path: %s", i, path);
-
+      log_msg("Found inode(index: %d) for file with path: %s\nlooking for file descriptor now\n", i, path);
+      retstat = get_empty_fd();
+      if(retstat == -1)
+        log_msg("No available file descriptor\n");
+      else{
+        take_fd(retstat);
+        log_msg("Return file descriptor %d for %s\n", retstat, path);
+      }
+    }else{
+      retstat = -1;
+      log_msg("File not find: %s", path);
     }
     
     return retstat;
@@ -599,6 +639,38 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
 	    path, buf, size, offset, fi);
     
+    int i = get_inode_from_path(path);
+    if(i!=-1)
+    {
+      int file_d = find_fd(i);
+      if(file_d!=0)
+      {
+        log_msg("FD(%d) and Inode(%d) found! Starting writing the file(%s).\n", file_d, i, path);
+        struct inode *ptr = &inodes_table.table[i];
+        if(ptr->size == 0){
+          ptr->data_blocks[0] = find_empty_data_bit();
+          set_block_bit(ptr->data_blocks[0],1);
+          int offset = 0;
+          char *buffer = malloc(BLOCK_SIZE);
+          log_msg("Block %d is taken to write\n", ptr->data_blocks[0]);
+          if(size <= BLOCK_SIZE)
+          {
+            if(block_write(3+TOTAL_INODE_NUMBER, buf) >= size){
+              ptr->size = size;
+              ptr->modified = time(NULL);
+              write_dt_bitmap_to_disk();
+              write_inode_to_disk(ptr->id);
+              log_msg("Succeed to write data to block %d with size %d..path: %s", 3+TOTAL_INODE_NUMBER, size, path);
+            }
+          }
+          free(buffer);
+        }
+      }
+      else{
+        retstat = -1;
+      }
+    }
+
     
     return retstat;
 }
