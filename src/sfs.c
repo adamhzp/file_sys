@@ -174,21 +174,26 @@ void write_dt_bitmap_to_disk()
     log_msg("Failed to write the updated bitmap to diskfile\n");
 }
 
-void write_inode_to_disk(int index)
+int write_inode_to_disk(int index)
 {
   log_msg("\nWriting updated inode to diskfile:\n");
+  int rtn = -1;
   struct inode *ptr = &inodes_table.table[index];
   uint8_t *buf = malloc(BLOCK_SIZE*sizeof(uint8_t));
   if(block_read(3+((ptr->id)/2), buf)>-1)  //e.g. inode 0 and 1 should be in block 0+2
   {
       int offset = (ptr->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
       memcpy(buf+offset, ptr, sizeof(struct inode));
-      if(block_write(3+((ptr->id)/2), buf)>0)
+      if(block_write(3+((ptr->id)/2), buf)>0){
         log_msg("Inode id: %d path %s is written in block %d\n\n", ptr->id, ptr->path, 3+ptr->id/2);
-      else 
-        retstat = -EFAULT;      
+        rtn = ptr->id;
+      }
+      else{ 
+        rtn = -1;
+      }      
   }
   free(buf);
+  return rtn;
 }
 
 
@@ -276,7 +281,7 @@ void *sfs_init(struct fuse_conn_info *conn)
       root->created = time(NULL);
       root->blocks = 0;
       root->uid = getuid();
-      root->gid = getgid();4
+      root->gid = getgid();
       root->type = 0;  // directory
 
       set_inode_bit(0,1); // set the bit map for root
