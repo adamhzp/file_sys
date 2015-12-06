@@ -77,13 +77,13 @@ struct i_list{ //use a struct to make it in the heap
 
 struct i_bitmap
 {
-  unsigned char bitmap[TOTAL_INODE_NUMBER];
+  unsigned char bitmap[TOTAL_INODE_NUMBER/8];
   int size;
 };
 
 struct block_bitmap
 {
-  unsigned char bitmap[TOTAL_DATA_BLOCKS];
+  unsigned char bitmap[TOTAL_DATA_BLOCKS/8];
   int size;
 };
 
@@ -112,12 +112,28 @@ void get_full_path(char *path) {
   path = fpath;
 }
 
+void set_nth_bit(unsigned char *bitmap, int idx)
+{   
+    bitmap[idx / 8] |= 1 << (idx % 8);
+}
+
+
+void clear_nth_bit(unsigned char *bitmap, int idx)
+{   
+    bitmap[idx / 8] &= ~(1 << (idx % 8));
+}
+
+int get_nth_bit(unsigned char *bitmap, int idx)
+{
+    return (bitmap[idx / 8] >> (idx % 8)) & 1;
+}
+
 int find_empty_inode_bit()
 {
   int i =0;
   for(;i<inodes_bm.size;i++)
   {
-    if(inodes_bm.bitmap[i] == 0)
+    if(get_nth_bit(inodes_bm.bitmap, i) == 0)
     {
       return i;
     }
@@ -130,7 +146,7 @@ int find_empty_data_bit()
   int i =0;
   for(;i<block_bm.size;i++)
   {
-    if(block_bm.bitmap[i] == 0)
+    if(get_nth_bit(block_bm.bitmap, i) == 0)
     {
       return i;
     }
@@ -142,14 +158,20 @@ void set_inode_bit(int index, int bit)
 {
   if(!(bit==0 || bit == 1))
     return;
-  inodes_bm.bitmap[index] = bit;
+  if(bit == 1)
+    set_nth_bit(inodes_bm.bitmap, index);
+  else
+    clear_nth_bit(inodes_bm.bitmap, index);
 }
 
 void set_block_bit(int index, int bit)
 {
   if(!(bit==0 || bit == 1))
     return;
-  block_bm.bitmap[index] = bit;
+  if(bit == 1)
+    set_nth_bit(block_bm.bitmap, index);
+  else
+    clear_nth_bit(block_bm.bitmap, index);
 }
 
 int get_inode_from_path(const char* path)
@@ -376,13 +398,13 @@ void *sfs_init(struct fuse_conn_info *conn)
       if(block_read(1, buffer) > 0){
         memcpy(&inodes_bm,buffer, sizeof(struct i_bitmap));
         memset(buffer,0,BLOCK_SIZE);
-        log_msg("\n\nInode bitmap is read:\n testing bitmap: %d,%d\n\n",inodes_bm.bitmap[0],inodes_bm.bitmap[1]);
+        log_msg("\n\nInode bitmap is read:\n testing bitmap: %d,%d\n\n",get_nth_bit(inodes_bm.bitmap,0),get_nth_bit(inodes_bm.bitmap,1));
       }
 
       if(block_read(2, buffer)>0){
         memcpy(&block_bm, buffer, sizeof(struct block_bitmap));
         memset(buffer, 0, BLOCK_SIZE);
-        log_msg("\n\nBlock bitmap is read:\n testing bitmap: %d,%d\n\n", block_bm.bitmap[0], block_bm.bitmap[1]);
+        log_msg("\n\nBlock bitmap is read:\n testing bitmap: %d,%d\n\n", get_nth_bit(block_bm.bitmap,0), get_nth_bit(block_bm.bitmap,1));
       }
 
       //load all the inodes..
