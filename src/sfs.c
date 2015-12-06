@@ -65,8 +65,9 @@ struct inode
   mode_t st_mode; //32 bytes 
   unsigned char path[64]; //96 bytes
   unsigned int data_blocks[15];//156 bytes
-  time_t last_accessed, created, modified;// 180 bytes 
-  char unusedspace[68];
+  time_t last_accessed, created, modified;// 180 bytes
+  int data_blocks_level;  //to implement data block indirect.. always indirect at the last data_block; 
+  char unusedspace[64];
 };
 
 
@@ -192,7 +193,7 @@ void write_i_bitmap_to_disk()
 {
   log_msg("\nWriting inode bitmap to diskfile:\n");
   if(block_write(1, &inodes_bm)>0)
-    log_msg("Updated block bitmap is written to the diskfile\n");
+    log_msg("Updated inode bitmap is written to the diskfile\n");
   else
     log_msg("Failed to write the updated bitmap to diskfile\n");
 }
@@ -271,16 +272,14 @@ void init_data_structure()
   for(i = 0; i<TOTAL_INODE_NUMBER; i++)
   {
     inodes_table.table[i].id = i;
+    memset(&inodes_table.table[i].data_blocks,0,15*sizeof(int));
+    memset(inodes_table.table[i].path, 0, 64*sizeof(char)) ;
+    inodes_table.table[i].data_blocks_level =0;
   }
 
-  for(i = 0; i<TOTAL_INODE_NUMBER;i++)
-  {
-    inodes_bm.bitmap[i] = 0;
-  }
-  for(i = 0; i<TOTAL_DATA_BLOCKS;i++)
-  {
-    block_bm.bitmap[i] = 0;
-  }
+  
+  memset(inodes_bm.bitmap,0,TOTAL_INODE_NUMBER/8);
+  memset(block_bm.bitmap, 0, TOTAL_DATA_BLOCKS/8);
 
   inodes_bm.size = TOTAL_INODE_NUMBER;
   block_bm.size = TOTAL_DATA_BLOCKS;
@@ -672,20 +671,45 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
         if(ptr->size == 0){
           ptr->data_blocks[0] = find_empty_data_bit();
           set_block_bit(ptr->data_blocks[0],1);
-          int offset = 0;
-          char *buffer = malloc(BLOCK_SIZE);
-          log_msg("Block %d is taken to write\n", ptr->data_blocks[0]);
-          if(size <= BLOCK_SIZE)
+          log_msg("Block %d is taken to write\n", ptr->data_blocks[0]); 
+        }
+        if(size <= BLOCK_SIZE)
+        {
+          if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[0], buf) >= size){
+            ptr->size = size;
+            ptr->modified = time(NULL);
+            write_dt_bitmap_to_disk();
+            write_inode_to_disk(ptr->id);
+            retstat = size;
+            log_msg("(single block)Succeed to write data to block %d with size %d..path: %s\n", 3+TOTAL_INODE_NUMBER, size, path);
+          }else{
+            log_msg("(single block)Failed to write datat to block for %s\n", path);
+          }
+        }else{              
+          int needed = size/BLOCK_SIZE;
+          if((size-needed*BLOCK_SIZE)>0)
+            needed++;
+          if(block_write(ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, buf)>0)
+              log_msg("data for %s is written at block %d", path,ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3);
+          else
+              log_msg("failed to write block %d for %s", ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, path);
+          retstat+=BLOCK_SIZE;
+          int offset = BLOCK_SIZE;
+          int block;
+          for(block = 1; block < needed; block++)
           {
-            if(block_write(3+TOTAL_INODE_NUMBER, buf) >= size){
-              ptr->size = size;
-              ptr->modified = time(NULL);
-              write_dt_bitmap_to_disk();
-              write_inode_to_disk(ptr->id);
-              log_msg("Succeed to write data to block %d with size %d..path: %s", 3+TOTAL_INODE_NUMBER, size, path);
+            ptr->data_blocks[block] = find_empty_data_bit();
+            set_block_bit(ptr->data_blocks[block],1);
+            log_msg("Block %d is taken to write\n", ptr->data_blocks[0]); 
+            if(block_write(ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, buf+offset)>0){
+              offset+=BLOCK_SIZE;
+              log_msg("data for %s is written at block %d", path,ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3);
+            }
+            else{
+              log_msg("failed to write block %d for %s", ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, path);
             }
           }
-          free(buffer);
+
         }
       }
       else{
