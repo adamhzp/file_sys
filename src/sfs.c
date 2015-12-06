@@ -156,6 +156,43 @@ int get_inode_from_path(const char* path)
     return -1;
 }
 
+void write_i_bitmap_to_disk()
+{
+  log_msg("\nWriting inode bitmap to diskfile:\n");
+  if(block_write(1, &inodes_bm)>0)
+    log_msg("Updated block bitmap is written to the diskfile\n");
+  else
+    log_msg("Failed to write the updated bitmap to diskfile\n");
+}
+
+void write_dt_bitmap_to_disk()
+{
+  log_msg("\nWriting data bitmap to diskfile:\n");
+  if(block_write(2, &block_bm)>0)
+    log_msg("Updated block bitmap is written to the diskfile\n");
+  else
+    log_msg("Failed to write the updated bitmap to diskfile\n");
+}
+
+void write_inode_to_disk(int index)
+{
+  log_msg("\nWriting updated inode to diskfile:\n");
+  struct inode *ptr = &inodes_table.table[index];
+  uint8_t *buf = malloc(BLOCK_SIZE*sizeof(uint8_t));
+  if(block_read(3+((ptr->id)/2), buf)>-1)  //e.g. inode 0 and 1 should be in block 0+2
+  {
+      int offset = (ptr->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
+      memcpy(buf+offset, ptr, sizeof(struct inode));
+      if(block_write(3+((ptr->id)/2), buf)>0)
+        log_msg("Inode id: %d path %s is written in block %d\n\n", ptr->id, ptr->path, 3+ptr->id/2);
+      else 
+        retstat = -EFAULT;      
+  }
+  free(buf);
+}
+
+
+
 /* 
  * A function initiate the inodes for the first setup of the file system
  */
@@ -227,7 +264,6 @@ void *sfs_init(struct fuse_conn_info *conn)
       supablock.fs_type = 0;
       supablock.data_blocks = TOTAL_DATA_BLOCKS;
       supablock.i_list = 1;
-      
 
       init_data_structure();
 
@@ -240,7 +276,7 @@ void *sfs_init(struct fuse_conn_info *conn)
       root->created = time(NULL);
       root->blocks = 0;
       root->uid = getuid();
-      root->gid = getgid();
+      root->gid = getgid();4
       root->type = 0;  // directory
 
       set_inode_bit(0,1); // set the bit map for root
@@ -424,10 +460,9 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       log_msg("Inode for path %s is created: index=%d\n", inodes_table.table[tmp->id].path,inodes_table.table[tmp->id].id);
       free(tmp);
       log_msg("Writing the inode to diskfile now: \n"); 
-      if(block_write(2, &block_bm)>0)
-        log_msg("\nUpdated block bitmap is written to the diskfile\n");
-
-      uint8_t *buf = malloc(BLOCK_SIZE);
+    
+      write_i_bitmap_to_disk();
+      uint8_t *buf = malloc(BLOCK_SIZE*sizeof(uint8_t));
       if(block_read(3+((in->id)/2), buf)>-1)  //e.g. inode 0 and 1 should be in block 0+2
       {
         int offset = (in->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
@@ -440,6 +475,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       free(buf);
 
     }else{
+      retstat = -EEXIST;
       log_msg("\nFile with path %s is found in inode %d\n", path, i);
     }
     
