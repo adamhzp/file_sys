@@ -537,6 +537,7 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 {
     int retstat = 0;
     
+    filler(buf,".", NULL, 0);
       
     return retstat;
 }
