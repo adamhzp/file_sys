@@ -30,7 +30,9 @@
 #define TOTAL_BLOCKS 1024
 #define TOTAL_INODE_NUMBER ((BLOCK_SIZE*64)/(sizeof(struct inode)))
 #define TOTAL_DATA_BLOCKS (TOTAL_BLOCKS - TOTAL_INODE_NUMBER - 1)
-
+#define TYPE_DIRECTORY 0
+#define TYPE_FILE 1
+#define TYPE_LINK 2  
 
 #include "log.h"
 
@@ -100,6 +102,32 @@ void get_full_path(char *path) {
   path = fpath;
 }
 
+int find_empty_inode_bit()
+{
+  int i =0;
+  for(;i<inodes_bm.size;i++)
+  {
+    if(inodes_bm.bitmap[i] == 0)
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
+int find_empty_data_bit()
+{
+  int i =0;
+  for(;i<block_bm.size;i++)
+  {
+    if(block_bm.bitmap[i] == 0)
+    {
+      return i;
+    }
+  }
+  return -1;
+}
+
 void set_inode_bit(int index, int bit)
 {
   if(!(bit==0 || bit == 1))
@@ -127,7 +155,6 @@ int get_inode_from_path(const char* path)
     }
     return -1;
 }
-
 
 /* 
  * A function initiate the inodes for the first setup of the file system
@@ -341,7 +368,8 @@ int sfs_getattr(const char *path, struct stat *statbuf)
       statbuf->st_size = tmp->size;
       statbuf->st_blocks = tmp->blocks;
     }else{
-      log_msg("\n\nInode not found\n\n");
+      log_msg("\n\nInode not found for path: %s\n\n", path);
+      retstat = -ENOENT;
     }
 
     log_msg("\nsfs_getattr(path=\"%s\", statbuf=0x%08x)\n",
@@ -370,7 +398,34 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
 	    path, mode, fi);
-    
+
+    int i = get_inode_from_path(path);
+    if(i == -1)
+    {
+      log_msg("\nCreating file with path: %s\n", path);
+      struct inode *tmp = malloc(sizeof(struct inode));
+      tmp->id = find_empty_inode_bit();
+      tmp->size = 0;
+      tmp->uid = getuid();
+      tmp->gid = getgid();
+      tmp->type = TYPE_FILE;
+      tmp->links = 1;
+      tmp->blocks = 0;
+      tmp->st_mode = mode;
+      memcpy(tmp->path, path,64);
+      if(S_ISDIR(mode)) {
+        tmp->type = TYPE_DIRECTORY;
+      }
+      tmp->created = time(NULL);
+
+      memcpy(&inodes_table.table[tmp->id], tmp, sizeof(struct inode));
+      set_inode_bit(tmp->id, 1);
+      log_msg("Inode for path %s is created: index=%d\n", inodes_table.table[tmp->id].path,inodes_table.table[tmp->id].id);
+      log_msg("Writing the inode to diskfile now: \n");
+
+    }else{
+      log_msg("\nFile with path %s is found in inode %d\n", path, i);
+    }
     
     return retstat;
 }
@@ -537,8 +592,7 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 {
     int retstat = 0;
     
-    filler(buf,".", NULL, 0);
-      
+    filler(buf,".", NULL, 0);      
     return retstat;
 }
 
