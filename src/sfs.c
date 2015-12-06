@@ -87,11 +87,21 @@ struct block_bitmap
   int size;
 };
 
+struct file_descriptor{
+  int id;
+  int inode_id;
+}
+
+struct fd_table{
+  struct file_descriptor table[TOTAL_INODE_NUMBER];
+}
+
+
 struct superblock supablock;
 struct i_bitmap inodes_bm;
 struct block_bitmap block_bm;
 struct i_list inodes_table;
-
+struct fd_table fd;
 
 /*  some helper functions */
 void get_full_path(char *path) {
@@ -244,7 +254,7 @@ void *sfs_init(struct fuse_conn_info *conn)
     log_msg("\nAdam---Initiating the file system(sys_init)\n");
 
 
-    log_msg("\nsize of an inode is %d bytes\n\n", sizeof(struct inode));
+    log_msg("\nThe size of an inode is %d bytes. Each block contains %d inodes.\n\n", sizeof(struct inode), BLOCK_SIZE/sizeof(struct inode));
 
     struct stat *statbuf = (struct stat*) malloc(sizeof(struct stat));
     int in = lstat((SFS_DATA)->diskfile,statbuf);
@@ -260,6 +270,13 @@ void *sfs_init(struct fuse_conn_info *conn)
 
     log_msg("\nCHECKING THE DISKFILE\n");
     disk_open((SFS_DATA)->diskfile);
+
+    in = 0;
+    for(; i<TOTAL_INODE_NUMBER;i++)
+    {
+      fd.table[i].id = i;
+      fd.table[i].inode_id = -1;
+    }
     
     char *buf = (char*) malloc(BLOCK_SIZE);
     if(block_read(0, buf) <= 0) {
@@ -512,7 +529,12 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_open(path\"%s\", fi=0x%08x)\n",
 	    path, fi);
+    int i = get_inode_from_path(path);
+    if(i != -1)
+    {
+      log_msg("Found inode(index: %d) for file with path: %s", i, path);
 
+    }
     
     return retstat;
 }
