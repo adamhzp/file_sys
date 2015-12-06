@@ -293,7 +293,7 @@ void *sfs_init(struct fuse_conn_info *conn)
       if(block_read(2, buffer)>0){
         memcpy(&block_bm, buffer, sizeof(struct block_bitmap));
         memset(buffer, 0, BLOCK_SIZE);
-        log_msg("\n\nBlock bitmap is read\n\n");
+        log_msg("\n\nBlock bitmap is read:\n testing bitmap: %d,%d\n\n", block_bm.bitmap[0], block_bm.bitmap[1]);
       }
 
       //load all the inodes..
@@ -419,9 +419,25 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       tmp->created = time(NULL);
 
       memcpy(&inodes_table.table[tmp->id], tmp, sizeof(struct inode));
+      struct inode *in = &inodes_table.table[tmp->id];
       set_inode_bit(tmp->id, 1);
       log_msg("Inode for path %s is created: index=%d\n", inodes_table.table[tmp->id].path,inodes_table.table[tmp->id].id);
-      log_msg("Writing the inode to diskfile now: \n");
+      free(tmp);
+      log_msg("Writing the inode to diskfile now: \n"); 
+      if(block_write(2, &block_bm)>0)
+        log_msg("\nUpdated block bitmap is written to the diskfile\n");
+
+      uint8_t *buf = malloc(BLOCK_SIZE);
+      if(block_read(3+((in->id)/2), buf)>-1)  //e.g. inode 0 and 1 should be in block 0+2
+      {
+        int offset = (in->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
+        memcpy(buf+offset, in, sizeof(struct inode));
+        if(block_write(3+((in->id)/2), buf)>0)
+          log_msg("Inode id: %d path %s is written in block %d\n\n", in->id, in->path, 3+in->id/2);
+        else 
+          retstat = -EFAULT;
+      }
+      free(buf);
 
     }else{
       log_msg("\nFile with path %s is found in inode %d\n", path, i);
