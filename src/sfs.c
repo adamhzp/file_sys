@@ -734,10 +734,37 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
           {
             memcpy(buf,temp, size);
             retstat = size;
-            log_msg("Data for \"%s\" is read successfully from block %d.",path, ptr->data_blocks[0]);
+            log_msg("Data for \"%s\" is read successfully from block %d\n.",path, ptr->data_blocks[0]);
           }else{
-            log_msg("Failed to read data for \"%s\" in block %d", path, ptr->data_blocks[0]);
+            log_msg("Failed to read data for \"%s\" in block %d\n", path, ptr->data_blocks[0]);
           }
+          free(temp);
+        }else{
+          char *temp = malloc(size);
+          int offset = 0;
+          struct inode *ptr = &inodes_table.table[i];
+          int j = 0;
+          while(offset<ptr->size && j<15 && (ptr->size-offset)>=BLOCK_SIZE)
+          {
+            if(block_read(ptr->data_blocks[j]+3+TOTAL_INODE_NUMBER, temp+offset)>-1)
+            {
+                j++;
+                offset+=BLOCK_SIZE;
+                log_msg("Data for \"%s\" is read successfully from block %d\n",path, ptr->data_blocks[j]);
+            }else{
+              log_msg("Failed to read data for \"%s\" in block %d\n", path, ptr->data_blocks[j]);
+            }
+          }
+          if(offset<ptr->size)
+          {
+            char *buffer = malloc(BLOCK_SIZE);
+            if(block_read(ptr->data_blocks[j]+3+TOTAL_INODE_NUMBER, buffer)>-1){
+              log_msg("last block of data is read from block %d!\n", ptr->data_blocks[j]);
+              memcpy(temp+offset, buffer, ptr->size-offset);
+            }
+            free(buffer);
+          }
+          memcpy(buf,temp,size);
           free(temp);
         }
 
