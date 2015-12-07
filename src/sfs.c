@@ -608,7 +608,7 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
       if(retstat == -1)
         log_msg("No available file descriptor\n");
       else{
-        take_fd(retstat);
+        take_fd(retstat,i);
         log_msg("Return file descriptor %d for %s\n", retstat, path);
       }
     }else{
@@ -643,7 +643,7 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     if(i!=-1)
     {
       int file_d = find_fd(i);
-      if(file_d!=0){
+      if(file_d!=-1){
         log_msg("FD(%d) and Inode(%d) found! Start releasing the file descriptor.\n", file_d, i);
         fd_t *f = &fd.table[file_d];
         int temp = f->inode_id;
@@ -680,7 +680,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
     if(i!=-1)
     {
       int file_d = find_fd(i);
-      if(file_d!=0)
+      if(file_d!=-1)
       {
         log_msg("FD(%d) and Inode(%d) found! Start reading the file(%s).\n", file_d, i, path);
         struct inode *ptr = &inodes_table.table[i];
@@ -722,7 +722,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
     if(i!=-1)
     {
       int file_d = find_fd(i);
-      if(file_d!=0)
+      if(file_d!=-1)
       {
         log_msg("FD(%d) and Inode(%d) found! Starting writing the file(%s).\n", file_d, i, path);
         struct inode *ptr = &inodes_table.table[i];
