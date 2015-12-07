@@ -253,12 +253,55 @@ int take_fd(int index, int inode_id)
   return -1;
 }
 
-int check_parent_dir(unsigned char* path, int i)
+int check_parent_dir(const char* path, int i)
 {
+  log_msg("trying to check the parent dir for %s\n",inodes_table.table[i].path);
   char *temp = malloc(64);
+  int len = strlen(inodes_table.table[i].path);
+  memcpy(temp,inodes_table.table[i].path, len);
+  log_msg("copied path is %s\n", temp);
+  int offset;
+  for(offset = len-1; offset>=0 ; offset--)
+  {
+    if(*(temp+offset) == '/' && offset!=0)
+    {
+      *(temp+offset)='\0';
+      break;
+    }
+     if(*(temp+offset) == '/'){
+      *(temp+offset+1) = '\0';
+      break;
+    }
+  }
+  log_msg("its parent is %s", temp);
+
+  if(strcmp(temp, path)== 0)
+  {
+    free(temp);
+    return 0;
+  }
 
   free(temp);
   return -1;
+}
+
+char* get_file_name(int i)
+{
+  int len = strlen(inodes_table.table[i].path);
+  char *temp =inodes_table.table[i].path;
+  int offset;
+  for(offset = len-1; offset>=0 ; offset--)
+  {
+    if(*(temp+offset) == '/')
+    {
+      break;
+    }
+  }
+  char *rtn = malloc(len-offset);
+  memcpy(rtn, temp+offset+1, len-offset);
+  *(rtn+strlen(rtn)+1)='\0';
+  log_msg("file name: %s\n", rtn);
+  return rtn;
 }
 
 
@@ -793,9 +836,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
       retstat = -1;
       log_msg("cannot find file %s to write\n", path);
     }
-
-
-    
+ 
     return retstat;
 }
 
@@ -868,6 +909,21 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
     
     filler(buf,".", NULL, 0);  
     filler(buf, "..", NULL, 0);
+    int i = 0;
+    for(;i<TOTAL_INODE_NUMBER;i++)
+    {
+      if(get_nth_bit(inodes_bm.bitmap, i)!=0)
+      {
+        if(check_parent_dir(path, i)!=-1 && strcmp(inodes_table.table[i].path, path)!=0)
+        {
+          char* tmp =get_file_name(i);
+          struct stat *statbuf = malloc(sizeof(struct stat));
+
+          filler(buf,tmp,NULL,0);
+          free(tmp);
+        }
+      }
+    }
 
     return retstat;
 }
