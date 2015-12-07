@@ -708,14 +708,28 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
             else{
               log_msg("failed to write block %d for %s", ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, path);
             }
+            if(block == needed-1) //the last block
+            {
+              if(offset == needed*BLOCK_SIZE)
+              {
+                ptr->size = size;
+                retstat = size;
+              }
+              else{
+                retstat = -1;
+              }
+            }
           }
-
         }
-      }
-      else{
+      }else{
         retstat = -1;
+        log_msg("file_descriptor not found for %s\n", path);
       }
+    }else{
+      retstat = -1;
+      log_msg("cannot find file %s to write\n", path);
     }
+
 
     
     return retstat;
