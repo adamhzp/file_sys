@@ -541,9 +541,9 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       {
         int offset = (in->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
         memcpy(buf+offset, in, sizeof(struct inode));
-        if(block_write(3+((in->id)/2), buf)>0)
+        if(block_write(3+((in->id)/2), buf)>0){
           log_msg("Inode id: %d path %s is written in block %d\n\n", in->id, in->path, 3+in->id/2);
-        else 
+        }else 
           retstat = -EFAULT;
       }
       free(buf);
@@ -674,10 +674,10 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
         log_msg("FD(%d) and Inode(%d) found! Start reading the file(%s).\n", file_d, i, path);
         struct inode *ptr = &inodes_table.table[i];
         if(ptr->size<=BLOCK_SIZE){
-          char *temp = malloc(ptr->size);
-          if(block_read(ptr->data_blocks[0], temp)>-1)
+          char *temp = malloc(size);
+          if(block_read(ptr->data_blocks[0]+3+TOTAL_INODE_NUMBER, temp)>-1)
           {
-            memcpy(buf,temp, ptr->size);
+            memcpy(buf,temp, size);
             retstat = size;
             log_msg("Data for \"%s\" is read successfully from block %d.",path, ptr->data_blocks[0]);
           }else{
@@ -691,7 +691,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 
 
    
-    return retstat;
+    return size;
 }
 
 /** Write data to an open file
