@@ -916,11 +916,19 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
       {
         if(check_parent_dir(path, i)!=-1 && strcmp(inodes_table.table[i].path, path)!=0)
         {
-          char* tmp =get_file_name(i);
+          char* name =get_file_name(i);
           struct stat *statbuf = malloc(sizeof(struct stat));
-
-          filler(buf,tmp,NULL,0);
-          free(tmp);
+          inode_t *tmp = &inodes_table.table[i];
+          statbuf->st_uid = tmp->uid;
+          statbuf->st_gid = tmp->gid;
+          statbuf->st_mode = tmp->st_mode;
+          statbuf->st_nlink = tmp->links;
+          statbuf->st_ctime = tmp->created;
+          statbuf->st_size = tmp->size;
+          statbuf->st_blocks = tmp->blocks;
+          filler(buf,name,statbuf,0);
+          free(name);
+          free(statbuf);
         }
       }
     }
