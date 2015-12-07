@@ -105,13 +105,6 @@ struct i_list inodes_table;
 struct fd_table fd;
 
 /*  some helper functions */
-void get_full_path(char *path) {
-  char *fpath = (char*) malloc(64*sizeof(char));
-  strcpy(fpath, SFS_DATA->diskfile);
-  strncat(fpath,path,64);
-  log_msg("\nDEBUG: path: %s with full path: %s\n",path,fpath);
-  path = fpath;
-}
 
 void set_nth_bit(unsigned char *bitmap, int idx)
 {   
@@ -567,13 +560,11 @@ int sfs_unlink(const char *path)
       struct inode *ptr = &inodes_table.table[i];
       log_msg("Deleting inode %d: \n", ptr->id);
       set_inode_bit(ptr->id, 0);
-      memset(ptr->path, 0, 64*sizeof(char));
+      memset(ptr->path, 0, 64);
       int j;
       for(j = 0; j<15;j++)
       {
-        if(ptr->data_blocks[j]!=-1){
-         set_block_bit(ptr->data_blocks[j],0);
-        }
+        set_block_bit(ptr->data_blocks[j],0);
         ptr->data_blocks[j] = -1;
       }
       log_msg("Inode %d delete complete!\n\n",ptr->id);
@@ -730,59 +721,60 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
           ptr->data_blocks[0] = find_empty_data_bit();
           set_block_bit(ptr->data_blocks[0],1);
           log_msg("Block %d is taken to write\n", ptr->data_blocks[0]); 
-        }
-        if(size <= BLOCK_SIZE)
-        {
-          if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[0], buf) >= size){
-            ptr->size = size;
-            ptr->modified = time(NULL);
-            write_dt_bitmap_to_disk();
-            write_inode_to_disk(ptr->id);
-            retstat = size;
-            write_inode_to_disk(ptr->id);
-            log_msg("(single block)Succeed to write data to block %d with size %d..path: %s\n", 3+TOTAL_INODE_NUMBER, size, path);
-          }else{
-            log_msg("(single block)Failed to write datat to block for %s\n", path);
-          }
-        }else{              
-          int needed = size/BLOCK_SIZE;
-          if((size-needed*BLOCK_SIZE)>0)
-            needed++;
-          if(block_write(ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, buf)>0)
-              log_msg("data for %s is written at block %d\n", path,ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3);
-          else
-              log_msg("failed to write block %d for %s\n", ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, path);
-          retstat+=BLOCK_SIZE;
-          int offset = BLOCK_SIZE;
-          int block;
-          for(block = 1; block < needed; block++)
+          if(size <= BLOCK_SIZE)
           {
-            ptr->data_blocks[block] = find_empty_data_bit();
-            set_block_bit(ptr->data_blocks[block],1);
-            log_msg("Block %d is taken to write\n", ptr->data_blocks[block]); 
-            if(block_write(ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, buf+offset)>0){
-              offset+=BLOCK_SIZE;
-              log_msg("data for %s is written at block %d\n", path,ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3);
+            if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[0], buf) >= size){
+              ptr->size = size;
+              ptr->modified = time(NULL);
+              write_dt_bitmap_to_disk();
+              write_inode_to_disk(ptr->id);
+              retstat = size;
+              write_inode_to_disk(ptr->id);
+              log_msg("(single block)Succeed to write data to block %d with size %d..path: %s\n", 3+TOTAL_INODE_NUMBER, size, path);
+            }else{
+              log_msg("(single block)Failed to write datat to block for %s\n", path);
             }
-            else{
-              log_msg("failed to write block %d for %s\n", ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, path);
-            }
-            if(block == needed-1) //the last block
+          }else{              
+            int needed = size/BLOCK_SIZE;
+            if((size-needed*BLOCK_SIZE)>0)
+            needed++;
+            if(block_write(ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, buf)>0)
+              log_msg("data for %s is written at block %d\n", path,ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3);
+            else
+              log_msg("failed to write block %d for %s\n", ptr->data_blocks[0]+TOTAL_INODE_NUMBER+3, path);
+            retstat+=BLOCK_SIZE;
+            int offset = BLOCK_SIZE;
+            int block;
+            for(block = 1; block < needed; block++)
             {
-              if(offset == needed*BLOCK_SIZE)
-              {
-                ptr->modified = time(NULL);
-                ptr->size = size;
-                retstat = size;
-                write_inode_to_disk(ptr->id);
-                log_msg("File(%s) inode is successfully written to disk, size: %d\n\n", path , ptr->size);
+              ptr->data_blocks[block] = find_empty_data_bit();
+              set_block_bit(ptr->data_blocks[block],1);
+              log_msg("Block %d is taken to write\n", ptr->data_blocks[block]); 
+              if(block_write(ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, buf+offset)>0){
+                offset+=BLOCK_SIZE;
+                log_msg("data for %s is written at block %d\n", path,ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3);
               }
               else{
-                retstat = -1;
+                log_msg("failed to write block %d for %s\n", ptr->data_blocks[block]+TOTAL_INODE_NUMBER+3, path);
+              }
+              if(block == needed-1) //the last block
+              {
+                if(offset == needed*BLOCK_SIZE)
+                {
+                  ptr->modified = time(NULL);
+                  ptr->size = size;
+                  retstat = size;
+                  write_inode_to_disk(ptr->id);
+                  log_msg("File(%s) inode is successfully written to disk, size: %d\n\n", path , ptr->size);
+                }
+                else{
+                  retstat = -1;
+                }
               }
             }
           }
         }
+
       }else{
         retstat = -1;
         log_msg("file_descriptor not found for %s\n", path);
