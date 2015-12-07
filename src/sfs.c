@@ -245,16 +245,16 @@ int find_fd(int index)
   int i;
   for(i = 0; i < TOTAL_INODE_NUMBER; i++)
   {
-    if(fd.table[i].id == index)
+    if(fd.table[i].inode_id == index)
       return i;
   }
   return -1;
 }
 
-int take_fd(int index)
+int take_fd(int index, int inode_id)
 {
-  if(fd.table[index].id == -1){
-    fd.table[index].id = index;
+  if(fd.table[index].inode_id == -1){
+    fd.table[index].inode_id = inode_id;
     return 0;
   }
   return -1;
@@ -642,7 +642,18 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     int i = get_inode_from_path(path);
     if(i!=-1)
     {
-
+      int file_d = find_fd(i);
+      if(file_d!=0){
+        log_msg("FD(%d) and Inode(%d) found! Start releasing the file descriptor.\n", file_d, i);
+        fd_t *f = &fd.table[file_d];
+        int temp = f->inode_id;
+        f->inode_id = -1;
+        log_msg("FD(%d) is released: new inode id for it is %d(old inode id %d)\n",f->id, f->inode_id,temp);
+      }else{
+        log_msg("FD not find!\n");
+      }
+    }else{
+      log_msg("Inode not find!");
     }
     
 
@@ -688,8 +699,6 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 
       }
     }
-
-
    
     return size;
 }
