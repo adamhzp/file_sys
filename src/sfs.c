@@ -272,7 +272,11 @@ void init_data_structure()
   for(i = 0; i<TOTAL_INODE_NUMBER; i++)
   {
     inodes_table.table[i].id = i;
-    memset(&inodes_table.table[i].data_blocks,0,15*sizeof(int));
+    int j;
+    for(j = 0; j<15;j++)
+    {
+      inodes_table.table[i].data_blocks[j] = -1;
+    }
     memset(inodes_table.table[i].path, 0, 64*sizeof(char)) ;
     inodes_table.table[i].data_blocks_level =0;
   }
@@ -557,8 +561,27 @@ int sfs_unlink(const char *path)
 {
     int retstat = 0;
     log_msg("\n\nsfs_unlink(path=\"%s\")\n", path);
+    int i = get_inode_from_path(path);
+    if(i!=-1)
+    {
+      struct inode *ptr = &inodes_table.table[i];
+      log_msg("Deleting inode %d: \n", ptr->id);
+      set_inode_bit(ptr->id, 0);
+      memset(ptr->path, 0, 64*sizeof(char));
+      int j;
+      for(j = 0; j<15;j++)
+      {
+        if(ptr->data_blocks[j]!=-1){
+         set_block_bit(ptr->data_blocks[j],0);
+        }
+        ptr->data_blocks[j] = -1;
+      }
+      log_msg("Inode %d delete complete!\n\n",ptr->id);
+      write_inode_to_disk(ptr->id);
+      write_i_bitmap_to_disk();
+      write_dt_bitmap_to_disk();
+    }
 
-    
     return retstat;
 }
 
@@ -615,6 +638,12 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
     int retstat = 0;
     log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
 	  path, fi);
+
+    int i = get_inode_from_path(path);
+    if(i!=-1)
+    {
+
+    }
     
 
     return retstat;
@@ -644,17 +673,17 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
       {
         log_msg("FD(%d) and Inode(%d) found! Start reading the file(%s).\n", file_d, i, path);
         struct inode *ptr = &inodes_table.table[i];
-        if(size>ptr->size){
-          retstat = -1;
-          log_msg("\nFile size is too small to read(%s)\n\n", path);
-        }else if(size<=BLOCK_SIZE){
-          if(block_read(ptr->data_blocks[0], buf)>0)
+        if(ptr->size<=BLOCK_SIZE){
+          char *temp = malloc(ptr->size);
+          if(block_read(ptr->data_blocks[0], temp)>-1)
           {
+            memcpy(buf,temp, ptr->size);
             retstat = size;
             log_msg("Data for \"%s\" is read successfully from block %d.",path, ptr->data_blocks[0]);
           }else{
             log_msg("Failed to read data for \"%s\" in block %d", path, ptr->data_blocks[0]);
           }
+          free(temp);
         }
 
       }
