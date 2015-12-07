@@ -253,6 +253,16 @@ int take_fd(int index, int inode_id)
   return -1;
 }
 
+int check_parent_dir(unsigned char* path, int i)
+{
+  char *temp = malloc(64);
+
+  free(temp);
+  return -1;
+}
+
+
+
 
 
 /* 
@@ -809,7 +819,6 @@ int sfs_rmdir(const char *path)
     log_msg("sfs_rmdir(path=\"%s\")\n",
 	    path);
     
-    
     return retstat;
 }
 
@@ -857,7 +866,9 @@ int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offse
 {
     int retstat = 0;
     
-    filler(buf,".", NULL, 0);      
+    filler(buf,".", NULL, 0);  
+    filler(buf, "..", NULL, 0);
+
     return retstat;
 }
 
