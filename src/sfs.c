@@ -853,6 +853,28 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               }
             }
           }
+        }else{
+          int blocks = ptr->size/BLOCK_SIZE;
+          int offset = 0;
+          if(ptr->size > blocks*BLOCK_SIZE){
+            int off = ptr->size - blocks*BLOCK_SIZE;
+            log_msg("the file size is %d.. offset: %d", ptr->size,off);
+            if(BLOCK_SIZE-off>=size){ 
+            char *buffer = malloc(BLOCK_SIZE);
+            if(block_read(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks], buffer)>-1)
+            {
+              memcpy(buffer+off, buf, BLOCK_SIZE-off);
+              if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks],buffer)>-1)
+              {
+                offset +=(BLOCK_SIZE-off);
+                ptr->size+=size;
+                log_msg("write successfully!\n");
+              }
+            } 
+            free(buffer);
+            return size;
+          }
+          }
         }
 
       }else{
