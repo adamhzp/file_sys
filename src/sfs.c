@@ -869,6 +869,7 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
               {
                 offset +=(BLOCK_SIZE-off);
                 ptr->size+=size;
+                write_inode_to_disk(ptr->id);
                 log_msg("write successfully!\n");
               }
             } 
