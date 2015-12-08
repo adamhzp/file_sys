@@ -588,6 +588,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
         int offset = (in->id%(BLOCK_SIZE/sizeof(struct inode)))*sizeof(struct inode);
         memcpy(buf+offset, in, sizeof(struct inode));
         if(block_write(3+((in->id)/2), buf)>0){
+          fi->fh = 0;
           log_msg("Inode id: %d path %s is written in block %d\n\n", in->id, in->path, 3+in->id/2);
         }else 
           retstat = -EFAULT;
