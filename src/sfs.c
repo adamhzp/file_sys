@@ -861,21 +861,69 @@ int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
             int off = ptr->size - blocks*BLOCK_SIZE;
             log_msg("the file size is %d.. offset: %d", ptr->size,off);
             if(BLOCK_SIZE-off>=size){ 
-            char *buffer = malloc(BLOCK_SIZE);
-            if(block_read(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks], buffer)>-1)
-            {
-              memcpy(buffer+off, buf, BLOCK_SIZE-off);
-              if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks],buffer)>-1)
+              char *buffer = malloc(BLOCK_SIZE);
+              if(block_read(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks], buffer)>-1)
               {
-                offset +=(BLOCK_SIZE-off);
-                ptr->size+=size;
-                write_inode_to_disk(ptr->id);
-                log_msg("write successfully!\n");
+                memcpy(buffer+off, buf, BLOCK_SIZE-off);
+                if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks],buffer)>-1)
+                {
+                  offset +=(BLOCK_SIZE-off);
+                  ptr->size+=size;
+                  write_inode_to_disk(ptr->id);
+                  log_msg("write successfully!\n");
+                }
               }
-            } 
-            free(buffer);
-            return size;
-          }
+              free(buffer);
+              return size;
+            }else{
+              char *buffer = malloc(BLOCK_SIZE);
+              if(block_read(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks], buffer)>-1)
+              {
+                memcpy(buffer+off, buf, BLOCK_SIZE-off);
+                if(block_write(3+TOTAL_INODE_NUMBER+ptr->data_blocks[blocks],buffer)>-1)
+                {
+                  offset +=(BLOCK_SIZE-off);
+                  write_inode_to_disk(ptr->id);
+                  log_msg("write successfully!\n");
+                }
+              }
+              blocks++;
+              int needed = (size - offset)/BLOCK_SIZE;
+              if((size - offset) > needed*BLOCK_SIZE){
+                needed++;
+              }
+              int b;
+              for(b = blocks; b<blocks+needed; b++)
+              {
+                ptr->data_blocks[b] = find_empty_data_bit();
+                set_block_bit(ptr->data_blocks[b],1);
+                log_msg("Block %d is taken to write\n", ptr->data_blocks[b]);
+                if(block_write(ptr->data_blocks[b]+TOTAL_INODE_NUMBER+3, buf+offset)>0){
+                  offset+=BLOCK_SIZE;
+                  log_msg("data for %s is written at block %d\n", path,ptr->data_blocks[b]+TOTAL_INODE_NUMBER+3);
+                }
+                else{
+                  log_msg("failed to write block %d for %s\n", ptr->data_blocks[b]+TOTAL_INODE_NUMBER+3, path);
+                }
+                if(b == blocks+needed-1) //the last block
+                {
+                  if(offset >= needed*BLOCK_SIZE)
+                  {
+                    ptr->modified = time(NULL);
+                    ptr->size += size;
+                    retstat = size;
+                    write_inode_to_disk(ptr->id);
+                    log_msg("File(%s) inode is successfully written to disk, size: %d\n\n", path , ptr->size);
+                  }
+                  else{
+                    retstat = -1;
+                  }
+              }
+
+              }
+              free(buffer);
+              return size;
+            }
           }
         }
 
