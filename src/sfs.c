@@ -227,7 +227,7 @@ int get_empty_fd()
   int i;
   for(i = 0; i < TOTAL_INODE_NUMBER; i++)
   {
-    if(fd.table[i].id != -1)
+    if(fd.table[i].inode_id == -1)
       return i;
   }
   return -1;
@@ -238,6 +238,7 @@ int find_fd(int index)
   int i;
   for(i = 0; i < TOTAL_INODE_NUMBER; i++)
   {
+    log_msg("FD %d is taken by %d\n", i, fd.table[i].inode_id);
     if(fd.table[i].inode_id == index)
       return i;
   }
@@ -553,7 +554,7 @@ int sfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
     int retstat = 0;
     log_msg("\nsfs_create(path=\"%s\", mode=0%03o, fi=0x%08x)\n",
-	    path, mode, fi);
+      path, mode, fi);
 
     int i = get_inode_from_path(path);
     if(i == -1)
@@ -644,7 +645,7 @@ int sfs_open(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
     log_msg("\n\nsfs_open(path\"%s\", fi=0x%08x)\n",
-	    path, fi);
+      path, fi);
     int i = get_inode_from_path(path);
     if(i != -1)
     {
@@ -682,7 +683,7 @@ int sfs_release(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
     log_msg("\nsfs_release(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
+    path, fi);
 
     int i = get_inode_from_path(path);
     if(i!=-1)
@@ -720,7 +721,7 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
 {
     int retstat = 0;
     log_msg("\nsfs_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-	    path, buf, size, offset, fi);
+      path, buf, size, offset, fi);
     int i = get_inode_from_path(path);
     if(i!=-1)
     {
@@ -784,11 +785,11 @@ int sfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse
  * Changed in version 2.2
  */
 int sfs_write(const char *path, const char *buf, size_t size, off_t offset,
-	     struct fuse_file_info *fi)
+       struct fuse_file_info *fi)
 {
     int retstat = 0;
     log_msg("\nsfs_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-	    path, buf, size, offset, fi);
+      path, buf, size, offset, fi);
     
     int i = get_inode_from_path(path);
     if(i!=-1)
@@ -945,8 +946,33 @@ int sfs_mkdir(const char *path, mode_t mode)
 {
     int retstat = 0;
     log_msg("\nsfs_mkdir(path=\"%s\", mode=0%3o)\n",
-	    path, mode);
-   
+      path, mode);
+    int i = get_inode_from_path(path);
+    if(i==-1){  
+      log_msg("\nCreating DIR with path: %s\n", path);
+      struct inode *tmp = malloc(sizeof(struct inode));
+      tmp->id = find_empty_inode_bit();
+      tmp->size = 0;
+      tmp->uid = getuid();
+      tmp->gid = getgid();
+      tmp->type = TYPE_FILE;
+      tmp->links = 1;
+      tmp->blocks = 0;
+      tmp->st_mode = mode | S_IFDIR;
+      memcpy(tmp->path, path,64);
+      tmp->created = time(NULL);
+      memcpy(&inodes_table.table[tmp->id], tmp, sizeof(struct inode));
+      set_inode_bit(tmp->id, 1);
+      log_msg("Inode for path %s is created: index=%d\n", inodes_table.table[tmp->id].path,inodes_table.table[tmp->id].id);            
+      write_inode_to_disk(tmp->id);
+      free(tmp);
+      write_i_bitmap_to_disk();
+
+    }else{
+      retstat = -EEXIST;
+      log_msg("\nDIR with path %s is found in inode %d\n", path, i);
+    }
+
     
     return retstat;
 }
@@ -957,7 +983,7 @@ int sfs_rmdir(const char *path)
 {
     int retstat = 0;
     log_msg("sfs_rmdir(path=\"%s\")\n",
-	    path);
+      path);
     
     return retstat;
 }
@@ -974,7 +1000,16 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
     log_msg("\nsfs_opendir(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
+    path, fi);
+    int i = get_inode_from_path(path);
+    if(i != -1)
+    {
+      log_msg("Found inode(index: %d) for dir with path: %s\nlooking for file descriptor now\n", i, path);
+      
+    }else{
+      log_msg("File not find: %s", path);
+      return -ENOENT;
+    }
 
     
     return retstat;
@@ -1002,7 +1037,7 @@ int sfs_opendir(const char *path, struct fuse_file_info *fi)
  * Introduced in version 2.3
  */
 int sfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
-	       struct fuse_file_info *fi)
+         struct fuse_file_info *fi)
 {
     int retstat = 0;
     
@@ -1080,12 +1115,12 @@ int main(int argc, char *argv[])
     
     // sanity checking on the command line
     if ((argc < 3) || (argv[argc-2][0] == '-') || (argv[argc-1][0] == '-'))
-	sfs_usage();
+  sfs_usage();
 
     sfs_data = malloc(sizeof(struct sfs_state));
     if (sfs_data == NULL) {
-	perror("main calloc");
-	abort();
+  perror("main calloc");
+  abort();
     }
 
     // Pull the diskfile and save it in internal data
