@@ -996,7 +996,7 @@ int sfs_rmdir(const char *path)
           if(check_parent_dir(path, j)!=-1)
           {
             log_msg("DIR not empty!\n");
-            return -ENOENT;
+            return -ENOTEMPTY;
           }
         }
       }
