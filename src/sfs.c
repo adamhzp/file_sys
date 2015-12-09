@@ -260,6 +260,7 @@ int check_parent_dir(const char* path, int i)
   char *temp = malloc(64);
   int len = strlen(inodes_table.table[i].path);
   memcpy(temp,inodes_table.table[i].path, len);
+  *(temp+len) = '\0';
   log_msg("copied path is %s\n", temp);
   int offset;
   for(offset = len-1; offset>=0 ; offset--)
@@ -984,6 +985,37 @@ int sfs_rmdir(const char *path)
     int retstat = 0;
     log_msg("sfs_rmdir(path=\"%s\")\n",
       path);
+
+    int i = get_inode_from_path(path);
+    if(i!=-1){
+      int j;
+      for(j=0;j<TOTAL_INODE_NUMBER;j++)
+      {
+        if(get_nth_bit(inodes_bm.bitmap, j)!=0 &&j!=i)
+        {
+          if(check_parent_dir(path, j)!=-1)
+          {
+            log_msg("DIR not empty!\n");
+            return -ENOENT;
+          }
+        }
+      }
+      struct inode *ptr = &inodes_table.table[i];
+      log_msg("Deleting inode %d: \n", ptr->id);
+      set_inode_bit(ptr->id, 0);
+      memset(ptr->path, 0, 64);
+      for(j = 0; j<15;j++)
+      {
+        set_block_bit(ptr->data_blocks[j],0);
+        ptr->data_blocks[j] = -1;
+      }
+      log_msg("Inode %d delete complete!\n\n",ptr->id);
+      write_inode_to_disk(ptr->id);
+      write_i_bitmap_to_disk();
+      write_dt_bitmap_to_disk();
+    }else{
+      return -ENOENT;
+    }
     
     return retstat;
 }
